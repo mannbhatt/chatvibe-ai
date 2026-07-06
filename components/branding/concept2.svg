@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="grad2a" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#635BFF" />
+      <stop offset="100%" stop-color="#0A84FF" />
+    </linearGradient>
+    <linearGradient id="grad2b" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF4D8D" />
+      <stop offset="100%" stop-color="#635BFF" />
+    </linearGradient>
+  </defs>
+  <!-- Left Bubble -->
+  <path d="M160 80 C260 80 280 100 280 200 C280 280 260 300 160 300 C80 300 40 320 40 280 C60 260 40 240 40 200 C40 100 60 80 160 80 Z" fill="url(#grad2a)" opacity="0.9" />
+  <!-- Right Bubble -->
+  <path d="M240 100 C340 100 360 120 360 220 C360 300 340 320 240 320 C160 320 120 340 120 300 C140 280 120 260 120 220 C120 120 140 100 240 100 Z" fill="url(#grad2b)" opacity="0.9" style="mix-blend-mode: multiply;" />
+</svg>

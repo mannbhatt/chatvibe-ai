@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#635BFF" />
+      <stop offset="100%" stop-color="#FF4D8D" />
+    </linearGradient>
+  </defs>
+  <!-- Background squircle/bubble -->
+  <path d="M200 40 C340 40 360 60 360 200 C360 340 340 360 200 360 C100 360 60 380 40 360 C60 340 40 300 40 200 C40 60 60 40 200 40 Z" fill="url(#grad1)" />
+  <!-- Spark cutout -->
+  <path d="M200 120 C200 180 140 200 140 200 C140 200 200 220 200 280 C200 280 200 220 260 200 C260 200 200 180 200 120 Z" fill="#ffffff" />
+</svg>

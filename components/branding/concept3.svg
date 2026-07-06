@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <rect width="400" height="400" rx="90" fill="#635BFF" />
+  <!-- Bubble Tail -->
+  <path d="M 90 310 L 50 350 L 130 310 Z" fill="#635BFF" />
+  
+  <!-- Pulse lines -->
+  <rect x="120" y="160" width="24" height="80" rx="12" fill="#0A84FF" />
+  <rect x="160" y="120" width="24" height="160" rx="12" fill="#FF4D8D" />
+  <rect x="200" y="80" width="24" height="240" rx="12" fill="#FFFFFF" />
+  <rect x="240" y="140" width="24" height="120" rx="12" fill="#FF4D8D" />
+  <rect x="280" y="170" width="24" height="60" rx="12" fill="#0A84FF" />
+</svg>
