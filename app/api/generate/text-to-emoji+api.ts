@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
-import { enforceUsageLimits, trackGeneration, supabaseAdmin } from '../../../lib/server-utils';
+import { spendUserTokens, refundUserTokens, trackGeneration, supabaseAdmin } from '../../../lib/server-utils';
+import { getFeatureCost } from '../../../lib/token-costs';
 
 // Requires GEMINI_API_KEY in .env
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -25,11 +26,16 @@ export async function POST(request: Request) {
     }
 
     // 1. Verify user limits
+    const cost = getFeatureCost('text_to_emoji');
+
     try {
-      await enforceUsageLimits(userId);
+      await spendUserTokens(userId, cost);
     } catch (e: any) {
-      if (e.message === 'limit_exceeded') {
-        return Response.json({ error: 'Generation limit reached. Please upgrade to Pro.' }, { status: 429 });
+      if (e.message.startsWith('limit_exceeded')) {
+        const parts = e.message.split(':');
+        const needed = parts[1] || cost;
+        const remaining = parts[2] || 0;
+        return Response.json({ error: `Not enough tokens. Needed: ${needed}, Remaining: ${remaining}. Please upgrade to Pro.` }, { status: 429 });
       }
       return Response.json({ error: 'User not found or error checking limits' }, { status: 404 });
     }
@@ -43,17 +49,23 @@ export async function POST(request: Request) {
     if (mode === 'Emoji Only') systemMessage = 'Translate the text completely into emojis, absolutely no text output allowed.';
 
     // 3. Call Gemini Free API
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        systemInstruction: systemMessage,
-        temperature: 0.7,
-        maxOutputTokens: 100,
-      }
-    });
-
-    const emojiResult = response.text?.trim() || '🤷‍♂️';
+    let emojiResult = '🤷‍♂️';
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          systemInstruction: systemMessage,
+          temperature: 0.7,
+          maxOutputTokens: 100,
+        }
+      });
+      emojiResult = response.text?.trim() || '🤷‍♂️';
+    } catch (aiError) {
+      console.error('AI Generation Error:', aiError);
+      await refundUserTokens(userId, cost);
+      return Response.json({ error: 'AI Generation failed. Tokens have been refunded.' }, { status: 500 });
+    }
 
     // 4. Decrement Limit & Save Generation
     const generation = await trackGeneration(
@@ -65,6 +77,12 @@ export async function POST(request: Request) {
       { emoji: emojiResult },
       'gemini-2.5-flash'
     );
+
+    try {
+      await supabaseAdmin.rpc('update_streak', { p_user_id: userId });
+    } catch (streakErr) {
+      console.error('Streak update failed:', streakErr);
+    }
 
     return Response.json({ 
       success: true, 

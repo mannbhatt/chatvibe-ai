@@ -13,67 +13,57 @@ export default function TabLayout() {
   }
 
   return (
-    <Tabs screenOptions={{
-      tabBarActiveTintColor: '#5D5FEF', // Our new primary purple
-      tabBarInactiveTintColor: '#8E8E93',
-      tabBarShowLabel: true,
-      tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
-      tabBarButton: (props) => <Pressable {...props as any} android_ripple={{ color: 'transparent' }} style={props.style} />,
-      tabBarStyle: {
-        backgroundColor: '#FFFFFF',
-        borderTopWidth: 1,
-        borderTopColor: '#F0F0F0',
-        height: 60 + insets.bottom,
-        paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
-        paddingTop: 8,
-      },
-      headerShown: false,
-    }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Feed',
-          tabBarIcon: ({ color }) => <Feather name="home" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="create"
-        options={{
-          title: 'Create',
-          tabBarIcon: ({ color, focused }) => (
-            <View className={`w-10 h-10 rounded-full items-center justify-center ${focused ? 'bg-[#EAE4FE]' : 'bg-gray-100'}`}>
-              <Feather name="plus" size={20} color={color} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="activity"
-        options={{
-          title: 'Messages',
-          tabBarIcon: ({ color }) => <Feather name="message-square" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <Feather name="user" size={24} color={color} />,
-        }}
-      />
-      {/* Hidden tabs */}
-      <Tabs.Screen
-        name="saved"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="dev-components"
-        options={{
-          href: null,
-        }}
-      />
-    </Tabs>
+    <View style={{ flex: 1, backgroundColor: '#cff5e1' }}>
+      <Tabs screenOptions={{
+        tabBarActiveTintColor: '#000000',
+        tabBarInactiveTintColor: 'rgba(0,0,0,0.4)',
+        tabBarShowLabel: true,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '800' },
+        tabBarButton: (props) => <Pressable {...props as any} android_ripple={{ color: 'transparent' }} style={props.style} />,
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF', // neo-green 00C49A
+
+          borderWidth: 0,
+          borderColor: '#000000',
+          borderTopWidth: 2,
+          height: 56,
+          marginBottom: Math.max(24, insets.bottom),
+          paddingBottom: 0,
+          paddingTop: 0,
+        },
+
+        headerShown: false,
+      }}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color }) => <Feather name="home" size={24} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="activity"
+          options={{
+            title: 'History',
+            tabBarIcon: ({ color }) => <Feather name="clock" size={24} color={color} />,
+          }}
+        />
+
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color }) => <Feather name="user" size={24} color={color} />,
+          }}
+        />
+        {/* Hidden tabs */}
+        <Tabs.Screen
+          name="dev-components"
+          options={{
+            href: null,
+          }}
+        />
+      </Tabs>
+    </View>
   );
 }

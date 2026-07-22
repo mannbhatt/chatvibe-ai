@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
-import { enforceUsageLimits, trackGeneration, supabaseAdmin } from '../../../lib/server-utils';
+import { spendUserTokens, refundUserTokens, trackGeneration, supabaseAdmin } from '../../../lib/server-utils';
+import { getFeatureCost } from '../../../lib/token-costs';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -17,17 +18,41 @@ export async function POST(request: Request) {
     }
     const userId = user.id;
 
-    const { prompt, mode } = await request.json();
+    let prompt = '';
+    let mode = '';
+
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      mode = (formData as any).get('mode') as string;
+      const file = (formData as any).get('prompt') as File;
+      if (!file) {
+        return Response.json({ error: 'Missing image file' }, { status: 400 });
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const base64Str = buffer.toString('base64');
+      prompt = `data:${file.type || 'image/jpeg'};base64,${base64Str}`;
+    } else {
+      const json = await request.json();
+      prompt = json.prompt;
+      mode = json.mode;
+    }
 
     if (!prompt || !mode) {
       return Response.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
+    const cost = getFeatureCost('meme_generator');
+
     try {
-      await enforceUsageLimits(userId);
+      await spendUserTokens(userId, cost);
     } catch (e: any) {
-      if (e.message === 'limit_exceeded') {
-        return Response.json({ error: 'Generation limit reached. Please upgrade to Pro.' }, { status: 429 });
+      if (e.message.startsWith('limit_exceeded')) {
+        const parts = e.message.split(':');
+        const needed = parts[1] || cost;
+        const remaining = parts[2] || 0;
+        return Response.json({ error: `Not enough tokens. Needed: ${needed}, Remaining: ${remaining}. Please upgrade to Pro.` }, { status: 429 });
       }
       return Response.json({ error: 'User not found or error checking limits' }, { status: 404 });
     }
@@ -53,23 +78,30 @@ Return ONLY a strictly valid JSON object matching this schema exactly:
 }
 DO NOT include markdown tags like \`\`\`json. Output raw JSON only.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        { text: systemMessage },
-        { inlineData: { data: base64Data, mimeType } }
-      ],
-      config: {
-        temperature: 0.9,
+    let jsonResult;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          { text: systemMessage },
+          { inlineData: { data: base64Data, mimeType } }
+        ],
+        config: {
+          temperature: 0.9,
+        }
+      });
+
+      let rawText = response.text?.trim() || '{}';
+      if (rawText.startsWith('```json')) {
+        rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
       }
-    });
 
-    let rawText = response.text?.trim() || '{}';
-    if (rawText.startsWith('```json')) {
-      rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+      jsonResult = JSON.parse(rawText);
+    } catch (aiError) {
+      console.error('AI Generation Error:', aiError);
+      await refundUserTokens(userId, cost);
+      return Response.json({ error: 'AI Generation failed. Please try again.' }, { status: 500 });
     }
-
-    const jsonResult = JSON.parse(rawText);
 
     const generation = await trackGeneration(
       userId,
@@ -80,6 +112,13 @@ DO NOT include markdown tags like \`\`\`json. Output raw JSON only.`;
       jsonResult,
       'gemini-2.5-flash'
     );
+
+    try {
+      await supabaseAdmin.rpc('update_streak', { p_user_id: userId });
+    } catch (streakErr) {
+      console.error('Streak update failed:', streakErr);
+    }
+
 
     return Response.json({ 
       success: true, 

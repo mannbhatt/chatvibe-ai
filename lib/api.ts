@@ -10,7 +10,7 @@ if (__DEV__) {
   console.log(`API Base URL: ${API_BASE_URL}`);
 }
 
-const DEFAULT_TIMEOUT = 30000;
+const DEFAULT_TIMEOUT = 120000;
 const MAX_RETRIES = 2;
 
 export interface ApiFetchOptions extends RequestInit {
@@ -31,6 +31,8 @@ export class ApiError extends Error {
 }
 
 const getErrorMessageForStatus = (status: number, fallbackError: string): string => {
+  if (fallbackError && fallbackError.trim() !== '') return fallbackError;
+  
   switch (status) {
     case 400: return "Bad Request: Please check your input.";
     case 401: return "Unauthorized: Please log in again.";
@@ -38,7 +40,7 @@ const getErrorMessageForStatus = (status: number, fallbackError: string): string
     case 404: return "Not Found: The requested feature doesn't exist.";
     case 429: return "Daily Limit Reached 🚀: You have used all free generations for today!";
     case 500: return "Server Error: Our AI is currently taking a break. Please try again later.";
-    default: return fallbackError || "An unexpected error occurred.";
+    default: return "An unexpected error occurred.";
   }
 };
 
@@ -69,9 +71,10 @@ export const apiFetch = async <T>(
 
       const { data: { session } } = await supabase.auth.getSession();
       
-      const defaultHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
+      const defaultHeaders: Record<string, string> = {};
+      if (!(fetchOptions.body instanceof FormData)) {
+        defaultHeaders['Content-Type'] = 'application/json';
+      }
 
       if (session?.access_token) {
         defaultHeaders['Authorization'] = `Bearer ${session.access_token}`;

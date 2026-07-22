@@ -1,5 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
-import { enforceUsageLimits, trackGeneration, supabaseAdmin } from '../../../lib/server-utils';
+import { spendUserTokens, trackGeneration, supabaseAdmin, refundUserTokens } from '../../../lib/server-utils';
+import { getFeatureCost } from '../../../lib/token-costs';
+import { computeStats } from '../../../lib/chat-stats';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -25,21 +27,38 @@ export async function POST(request: Request) {
 
     let aiPrompt = prompt;
     let participants: string[] = [];
+    let computedStats: any = null;
+    
     if (isWhatsApp && typeof prompt === 'object' && prompt.messages) {
-      aiPrompt = JSON.stringify(prompt.messages);
+      // Aggressively trim raw messages to save tokens.
+      aiPrompt = "[Raw messages omitted for token efficiency. Refer entirely to the computed stats for your vibe analysis.]";
       participants = prompt.participants || [];
+      computedStats = computeStats(prompt.messages, participants);
     }
 
+    let messageCount = 1;
+    if (isWhatsApp && typeof prompt === 'object' && prompt.messages) {
+      messageCount = prompt.messages.length || 1;
+    } else if (typeof prompt === 'string') {
+      messageCount = prompt.split('\n').filter(l => l.trim().length > 0).length || 1;
+    }
+
+    const cost = getFeatureCost('vibe_check', messageCount);
+
     try {
-      await enforceUsageLimits(userId);
+      await spendUserTokens(userId, cost);
     } catch (e: any) {
-      if (e.message === 'limit_exceeded') {
-        return Response.json({ error: 'Generation limit reached. Please upgrade to Pro.' }, { status: 429 });
+      if (e.message.startsWith('limit_exceeded')) {
+        const parts = e.message.split(':');
+        const needed = parts[1] || cost;
+        const remaining = parts[2] || 0;
+        return Response.json({ error: `Not enough tokens. Needed: ${needed}, Remaining: ${remaining}. Please upgrade to Pro.` }, { status: 429 });
       }
       return Response.json({ error: 'User not found or error checking limits' }, { status: 404 });
     }
 
     const systemMessage = `You are a Vibe Checker. Analyze the provided text or chat log.
+${computedStats ? `\nI have pre-computed conversational statistics for the participants in this chat. YOU MUST heavily ground your scores (Friendship, Flirting, Drama, Chaos, Sarcasm, Energy, Mood) in these hard numbers rather than your unaided read of the raw text. For example, high ghosting gaps should lower Friendship or Flirting scores, high message volume or emojis should affect Energy, etc. Here are the exact stats:\n${JSON.stringify(computedStats, null, 2)}\n` : ''}
 Return ONLY a strictly valid JSON object matching this schema exactly:
 {
   "metrics": {
@@ -55,21 +74,31 @@ Return ONLY a strictly valid JSON object matching this schema exactly:
 }
 DO NOT include markdown tags like \`\`\`json. Output raw JSON only.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: aiPrompt,
-      config: {
-        systemInstruction: systemMessage,
-        temperature: 0.6,
+    let jsonResult;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: aiPrompt,
+        config: {
+          systemInstruction: systemMessage,
+          temperature: 0.6,
+        }
+      });
+
+      let rawText = response.text?.trim() || '{}';
+      if (rawText.startsWith('```json')) {
+        rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
       }
-    });
 
-    let rawText = response.text?.trim() || '{}';
-    if (rawText.startsWith('```json')) {
-      rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+      jsonResult = JSON.parse(rawText);
+      if (computedStats) {
+        jsonResult.computedStats = computedStats;
+      }
+    } catch (aiError) {
+      console.error('AI Generation Error:', aiError);
+      await refundUserTokens(userId, cost);
+      return Response.json({ error: 'AI Generation failed. Please try again.' }, { status: 500 });
     }
-
-    const jsonResult = JSON.parse(rawText);
 
     const generation = await trackGeneration(
       userId,
@@ -80,6 +109,13 @@ DO NOT include markdown tags like \`\`\`json. Output raw JSON only.`;
       { ...jsonResult, participants },
       'gemini-2.5-flash'
     );
+
+    try {
+      await supabaseAdmin.rpc('update_streak', { p_user_id: userId });
+    } catch (streakErr) {
+      console.error('Streak update failed:', streakErr);
+    }
+
 
     return Response.json({ 
       success: true, 

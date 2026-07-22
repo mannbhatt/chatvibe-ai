@@ -5,6 +5,7 @@ import { FontAwesome5, Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useRouter, Redirect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
@@ -16,6 +17,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { session, isLoading } = useAuth();
+  const { showAlert } = useAlert();
 
   if (!isLoading && session) {
     return <Redirect href="/(tabs)" />;
@@ -74,7 +76,7 @@ export default function LoginScreen() {
         }
       }
     } catch (error: any) {
-      Alert.alert('Authentication Error', error.message || 'An error occurred during sign in');
+      showAlert('Oops!', error.message || 'We couldn\'t sign you in. Please check your details and try again.', [], 'error');
     } finally {
       setLoading(false);
     }
@@ -89,50 +91,52 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FCFBFF' }} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#cff5e1' }} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, justifyContent: 'center' }} showsVerticalScrollIndicator={false}>
 
         {/* Title Area */}
         <View className="items-center mb-10">
-          <Image source={require('../../assets/icon.png')} className="w-20 h-20 mb-4 rounded-3xl" resizeMode="contain" />
-          <Text className="text-[36px] font-extrabold mb-4 tracking-tight"><Text className="text-[#5D5FEF]">ChatVibe</Text> <Text className="text-[#FF4B72]">AI</Text></Text>
-          <View className="h-1 w-10 bg-[#5D5FEF] rounded-full" />
+          <Image source={require('../../assets/icon.png')} className="w-20 h-20 mb-4 rounded-3xl border-[3px] border-black" resizeMode="contain" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }} />
+          <Text className="text-[36px] font-extrabold mb-4 tracking-tight text-black">ChatVibe <Text className="text-black">AI</Text></Text>
+          <View className="h-2 w-12 bg-black rounded-full" />
         </View>
 
         {/* Floating Auth Card */}
-        <View className="bg-white rounded-[32px] p-8 shadow-sm mb-10" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.05, shadowRadius: 20, elevation: 5 }}>
+        <View className="bg-neo-yellow rounded-3xl p-8 mb-10 border-[4px] border-black" style={{ shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 }}>
           <View className="items-center mb-8">
-            <Text className="text-[26px] font-extrabold text-[#5D5FEF] mb-2 tracking-tight">Welcome</Text>
-            <Text className="text-[#666] text-[15px] text-center">Sign in to continue your journey</Text>
+            <Text className="text-[26px] font-extrabold text-black mb-2 tracking-tight">Welcome</Text>
+            <Text className="text-black/80 text-[15px] text-center font-bold">Sign in to continue your journey</Text>
           </View>
 
           <TouchableOpacity
             onPress={signInWithGoogle}
             disabled={loading}
-            className={`w-full flex-row items-center justify-center h-14 bg-white border border-gray-200 rounded-[16px] mb-4 shadow-sm ${loading ? 'opacity-50' : ''}`}
+            className={`w-full flex-row items-center justify-center h-14 bg-white border-[3px] border-black rounded-2xl mb-4 ${loading ? 'opacity-50' : ''}`}
+            style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 }}
           >
-            <FontAwesome5 name="google" size={20} color="#FF4B72" />
-            <Text className="ml-3 font-semibold text-[#5D5FEF] text-[16px]">{loading ? 'Connecting...' : 'Continue with Google'}</Text>
+            <FontAwesome5 name="google" size={20} color="black" />
+            <Text className="ml-3 font-extrabold text-black text-[16px]">{loading ? 'Connecting...' : 'Continue with Google'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={signInWithApple}
             disabled={loading}
-            className={`w-full flex-row items-center justify-center h-14 bg-[#5D5FEF] rounded-[16px] shadow-sm mb-8 ${loading ? 'opacity-50' : ''}`}
+            className={`w-full flex-row items-center justify-center h-14 bg-neo-purple border-[3px] border-black rounded-2xl mb-8 ${loading ? 'opacity-50' : ''}`}
+            style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 }}
           >
             <FontAwesome5 name="apple" size={22} color="white" />
-            <Text className="ml-3 font-semibold text-white text-[16px]">Continue with Apple</Text>
+            <Text className="ml-3 font-extrabold text-white text-[16px]">Continue with Apple</Text>
           </TouchableOpacity>
 
-          <Text className="text-center text-[#8E8E93] text-[13px] leading-5 px-2">
-            By continuing, you agree to our <Text className="text-[#5D5FEF]">Terms of Service</Text> and <Text className="text-[#5D5FEF]">Privacy Policy</Text>.
+          <Text className="text-center text-black/70 font-bold text-[13px] leading-5 px-2">
+            By continuing, you agree to our <Text className="text-black font-extrabold">Terms of Service</Text> and <Text className="text-black font-extrabold">Privacy Policy</Text>.
           </Text>
         </View>
 
         {/* Footer Area */}
         <View className="flex-row justify-center items-center">
-          <Feather name="lock" size={14} color="#8E8E93" />
-          <Text className="ml-2 text-[#8E8E93] text-[14px] font-medium">Your chats are private and encrypted</Text>
+          <Feather name="lock" size={14} color="black" />
+          <Text className="ml-2 text-black/80 text-[14px] font-bold">Your chats are private and encrypted</Text>
         </View>
 
       </ScrollView>

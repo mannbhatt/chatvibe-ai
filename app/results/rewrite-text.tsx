@@ -4,15 +4,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
+import { AnimatedPressable } from '../../components/ui';
 
 export default function RewriteTextResultScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { resultData, original_text, generation_id, tone } = useLocalSearchParams();
-  const [isFavorited, setIsFavorited] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const { showAlert } = useAlert();
+  const { resultData, original_text, generation_id, is_favorite, tone } = useLocalSearchParams();
+  const [isFavorited, setIsFavorited] = useState(is_favorite === 'true');
 
   let data = { rewrittenText: '' } as any;
   try {
@@ -21,80 +24,82 @@ export default function RewriteTextResultScreen() {
     console.error('Failed to parse resultData', e);
   }
 
+
+
   const handleCopy = async () => {
     if (data.rewrittenText) {
       await Clipboard.setStringAsync(data.rewrittenText);
-      Alert.alert('Copied!', 'Text copied to clipboard ✨');
+      showAlert('Copied!', 'Text copied to your clipboard ✨', [], 'success');
     }
   };
 
   const handleShare = async () => {
     try {
-      await Share.share({
-        message: `${data.rewrittenText}\n\nGenerated with ChatVibe AI`,
-      });
+      if (data.rewrittenText) {
+        await Share.share({
+          message: `Rewritten Text (${tone} tone):\n${data.rewrittenText}`,
+        });
+      }
     } catch (error: any) {
-      Alert.alert('Error sharing', error.message);
+      showAlert('Error sharing', 'We couldn\'t open the share menu.', [], 'error');
     }
   };
 
   const handleFavorite = async () => {
-    if (!generation_id || !user || isFavorited) return;
-    setIsSaving(true);
-    const { error } = await supabase.from('saved_results').insert({
-      user_id: user.id,
-      generation_id: generation_id,
-    });
-    setIsSaving(false);
-    if (error && error.code !== '23505') Alert.alert('Error', 'Could not save result.');
-    else setIsFavorited(true);
+    if (!generation_id) return;
+    const newStatus = !isFavorited;
+    const { error } = await supabase.from('generations').update({ is_favorite: newStatus }).eq('id', generation_id);
+    if (!error) {
+      setIsFavorited(newStatus);
+    }
   };
 
+
+
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FCFBFF' }} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#3b82f6' }} edges={['top', 'left', 'right', 'bottom']}>
       <View className="flex-row justify-between items-center px-6 pt-4 pb-4">
-        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white rounded-full items-center justify-center shadow-sm">
-          <Feather name="arrow-left" size={20} color="#111" />
-        </TouchableOpacity>
-        <Text className="text-[18px] font-extrabold text-[#111] tracking-tight">Rewrite Text</Text>
-        <View className="w-10 h-10" />
+        <AnimatedPressable onPress={() => router.back()} className="w-12 h-12 bg-white border-[3px] border-black rounded-full items-center justify-center" style={{ shadowColor: '#000', shadowOffset: { width: 3, height: 3 }, shadowOpacity: 1, shadowRadius: 0 }}>
+          <Feather name="arrow-left" size={24} color="black" />
+        </AnimatedPressable>
+        <Text className="text-[18px] font-extrabold text-white tracking-tight">Rewrite Text</Text>
+        <View className="w-12 h-12" />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1 px-6">
-        <View className="bg-white rounded-[32px] p-8 shadow-sm mb-6 border border-[#EFF6FF]">
-          <View className="bg-[#EFF6FF] self-start px-4 py-1.5 rounded-full mb-6 flex-row items-center">
-            <Text className="text-[#3B82F6] font-bold text-[12px] uppercase tracking-wider">{tone} TONE</Text>
+        <View className="bg-white border-[4px] border-black rounded-[32px] p-8 mb-6" style={{ shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0 }}>
+          <View className="bg-neo-yellow border-[3px] border-black self-start px-4 py-1.5 rounded-xl mb-6" style={{ shadowColor: '#000', shadowOffset: { width: 3, height: 3 }, shadowOpacity: 1, shadowRadius: 0 }}>
+            <Text className="text-black font-extrabold text-[12px] uppercase tracking-wider">{tone} TONE</Text>
           </View>
 
-          <Text className="text-[20px] text-[#111] font-medium leading-8 mb-8">{data.rewrittenText}</Text>
+          <Text className="text-[20px] text-black font-extrabold leading-8 mb-8">{data.rewrittenText}</Text>
 
-          <View className="bg-[#F8F9FA] rounded-2xl p-4 border border-gray-100">
-            <Text className="text-[#8E8E93] font-medium text-[13px] uppercase tracking-wider mb-2">Original Text</Text>
-            <Text className="text-[#111] text-[15px] leading-6">{original_text}</Text>
+          <View className="bg-white border-[3px] border-black rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+            <Text className="text-black font-extrabold text-[13px] uppercase tracking-wider mb-2">Original Text</Text>
+            <Text className="text-black font-bold text-[15px] leading-6">{original_text}</Text>
           </View>
         </View>
 
-        <Text className="text-center text-[#8E8E93] text-[12px] mb-6 px-4">
+
+        <Text className="text-center text-white text-[12px] mb-6 px-4">
           For entertainment purposes only. AI can make mistakes.
         </Text>
 
         <View className="flex-row flex-wrap justify-between mb-12">
-          <TouchableOpacity onPress={handleCopy} className="w-[48%] bg-white rounded-[20px] p-4 mb-4 shadow-sm items-center justify-center flex-row">
-            <Feather name="copy" size={20} color="#111" />
-            <Text className="font-bold text-[#111] ml-2">Copy</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleShare} className="w-[48%] bg-white rounded-[20px] p-4 mb-4 shadow-sm items-center justify-center flex-row">
-            <Feather name="share" size={20} color="#111" />
-            <Text className="font-bold text-[#111] ml-2">Share</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleFavorite} disabled={isSaving || isFavorited} className={`w-[48%] bg-white rounded-[20px] p-4 shadow-sm items-center justify-center flex-row ${(isSaving || isFavorited) ? 'opacity-50' : ''}`}>
-            <FontAwesome5 name="star" size={18} color={isFavorited ? "#FFC107" : "#111"} solid={isFavorited} />
-            <Text className="font-bold text-[#111] ml-2">{isFavorited ? 'Saved' : 'Favorite'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.back()} className="w-[48%] bg-[#3B82F6] rounded-[20px] p-4 shadow-sm items-center justify-center flex-row">
-            <Feather name="refresh-cw" size={20} color="white" />
-            <Text className="font-bold text-white ml-2">Remix</Text>
-          </TouchableOpacity>
+          <AnimatedPressable onPress={handleCopy} className="w-[48%] bg-white border-[3px] border-black rounded-2xl p-4 mb-4 items-center justify-center flex-row" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+            <Feather name="copy" size={20} color="black" />
+            <Text className="font-extrabold text-black ml-2 text-[14px]">Copy</Text>
+          </AnimatedPressable>
+          <AnimatedPressable onPress={handleShare} className="w-[48%] bg-white border-[3px] border-black rounded-2xl p-4 mb-4 items-center justify-center flex-row" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+            <Feather name="share" size={20} color="black" />
+            <Text className="font-extrabold text-black ml-2 text-[14px]">Share</Text>
+          </AnimatedPressable>
+
+          <AnimatedPressable onPress={handleFavorite} className="w-[100%] bg-white border-[3px] border-black rounded-2xl p-3 mb-4 items-center justify-center flex-row" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+            <FontAwesome5 name="star" size={14} color={isFavorited ? "#FFC107" : "black"} solid={isFavorited} />
+            <Text className="font-extrabold text-black ml-1 text-[12px]">Star</Text>
+          </AnimatedPressable>
         </View>
       </ScrollView>
     </SafeAreaView>

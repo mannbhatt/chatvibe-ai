@@ -56,31 +56,30 @@ export function LoadingVibe() {
   });
 
   return (
-    <View className="absolute inset-0 bg-white/90 z-50 items-center justify-center">
+    <View className="absolute inset-0 bg-white/95 z-50 items-center justify-center">
       <View className="items-center">
         {/* Animated Icon Container */}
         <Animated.View 
-          style={{ transform: [{ scale: pulseValue }] }}
-          className="w-32 h-32 bg-[#F8F5FF] rounded-[40px] items-center justify-center mb-8 shadow-sm"
+          style={{ transform: [{ scale: pulseValue }], shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0 }}
+          className="w-32 h-32 bg-neo-yellow rounded-[32px] border-[4px] border-black items-center justify-center mb-8"
         >
           <Animated.View style={{ transform: [{ rotate: spin }] }}>
-            <View className="w-16 h-16 bg-[#5D5FEF] rounded-full items-center justify-center opacity-20 absolute" />
-            <Feather name="loader" size={40} color="#5D5FEF" />
+            <Feather name="loader" size={48} color="black" />
           </Animated.View>
         </Animated.View>
 
         {/* Rotating Text */}
-        <Text className="text-[24px] font-extrabold text-[#111] tracking-tight mb-2 text-center">
+        <Text className="text-[28px] font-extrabold text-black tracking-tight mb-2 text-center">
           Decoding the Vibe
         </Text>
-        <Text className="text-[16px] font-medium text-[#8E8E93] text-center">
+        <Text className="text-[16px] font-bold text-black/70 text-center">
           {MESSAGES[messageIndex]}
         </Text>
 
         {/* Fake progress bar */}
-        <View className="w-48 h-1.5 bg-gray-100 rounded-full mt-8 overflow-hidden">
+        <View className="w-48 h-4 bg-white border-[3px] border-black rounded-full mt-8 overflow-hidden">
           <Animated.View 
-            className="h-full bg-[#5D5FEF] rounded-full"
+            className="h-full bg-neo-pink border-r-[3px] border-black"
             style={{
               width: '100%',
               transform: [{

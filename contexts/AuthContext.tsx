@@ -8,6 +8,9 @@ type UserProfile = {
   display_name?: string;
   email?: string;
   is_premium?: boolean;
+  tokens_used_today?: number;
+  daily_token_limit?: number;
+  generations_today?: number;
 };
 
 type AuthContextType = {
@@ -33,6 +36,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
+    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+      console.warn('fetchProfile called with invalid userId:', userId);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -40,6 +48,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single();
 
     if (!error && data) {
+      // OVERRIDE WITH get_token_status for accurate daily tokens
+      const { data: tokenStatusData, error: rpcError } = await supabase.rpc('get_token_status', { p_user_id: userId });
+      
+
+      const tokenStatus = Array.isArray(tokenStatusData) ? tokenStatusData[0] : tokenStatusData;
+      if (tokenStatus && !rpcError) {
+        const used = tokenStatus.tokens_used !== undefined ? tokenStatus.tokens_used : tokenStatus.tokens_used_today;
+        const limit = tokenStatus.daily_limit !== undefined ? tokenStatus.daily_limit : tokenStatus.daily_token_limit;
+        
+        if (used !== undefined) data.tokens_used_today = Number(used);
+        if (limit !== undefined) data.daily_token_limit = Number(limit);
+      } else {
+        // FALLBACK: Client side date check if RPC fails or is missing
+        if (data.generations_reset_at) {
+          const resetDate = new Date(data.generations_reset_at);
+          const today = new Date();
+          if (resetDate.getUTCFullYear() !== today.getUTCFullYear() ||
+              resetDate.getUTCMonth() !== today.getUTCMonth() ||
+              resetDate.getUTCDate() !== today.getUTCDate()) {
+            data.tokens_used_today = 0;
+          }
+        }
+      }
       setUserProfile(data);
     } else {
       console.error('Failed to fetch profile', error);

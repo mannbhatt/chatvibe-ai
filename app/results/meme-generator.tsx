@@ -1,57 +1,98 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, Share, Alert, Image, ScrollView, Dimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Share, Alert, ScrollView, Dimensions, Image, LogBox } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
+import ViewShot from 'react-native-view-shot';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
+import MemeCanvas from '../../components/MemeCanvas';
+
+LogBox.ignoreLogs(['Method readAsStringAsync imported from "expo-file-system" is deprecated']);
 
 const { width } = Dimensions.get('window');
+const CHATVIBE_MEMES_DIR = FileSystem.documentDirectory + 'ChatVibe_Memes/';
 
 export default function MemeGeneratorResultScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { showAlert } = useAlert();
   const { resultData, original_text, generation_id } = useLocalSearchParams();
-  const [isFavorited, setIsFavorited] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const insets = useSafeAreaInsets();
 
-  let data = { captions: [] } as any;
-  try {
-    data = JSON.parse(resultData as string);
-  } catch (e) {
-    console.error('Failed to parse resultData', e);
-  }
-
-  const handleCopy = async () => {
-    if (data.captions && data.captions[activeIndex]) {
-      await Clipboard.setStringAsync(data.captions[activeIndex]);
-      Alert.alert('Copied!', 'Caption copied to clipboard ✨');
-    }
-  };
-
-  const handleShare = async () => {
+  const [data, setData] = useState<any>(() => {
     try {
-      await Share.share({
-        message: `${data.captions[activeIndex]}\n\nGenerated with ChatVibe AI`,
-      });
-    } catch (error: any) {
-      Alert.alert('Error sharing', error.message);
+      return resultData ? JSON.parse(resultData as string) : { captions: [] };
+    } catch (e) {
+      return { captions: [] };
     }
-  };
+  });
 
-  const handleFavorite = async () => {
-    if (!generation_id || !user || isFavorited) return;
-    setIsSaving(true);
-    const { error } = await supabase.from('saved_results').insert({
-      user_id: user.id,
-      generation_id: generation_id,
-    });
-    setIsSaving(false);
-    if (error && error.code !== '23505') Alert.alert('Error', 'Could not save result.');
-    else setIsFavorited(true);
-  };
+  const [originalText, setOriginalText] = useState<string>(original_text as string || '');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [finalMemeUri, setFinalMemeUri] = useState<string | null>(null);
+  
+  const viewShotRef = useRef<any>(null);
+
+  useEffect(() => {
+    const ensureDirAndCheckLocal = async () => {
+      try {
+        const dirInfo = await FileSystem.getInfoAsync(CHATVIBE_MEMES_DIR);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(CHATVIBE_MEMES_DIR, { intermediates: true });
+        }
+        
+        if (generation_id) {
+          const localUri = `${CHATVIBE_MEMES_DIR}${generation_id}.jpeg`;
+          const fileInfo = await FileSystem.getInfoAsync(localUri);
+          if (fileInfo.exists) {
+            setFinalMemeUri(localUri);
+          }
+        }
+      } catch (e) {
+        console.error('Local FS error:', e);
+      }
+    };
+
+    ensureDirAndCheckLocal();
+
+    if ((!originalText || !data.captions?.length) && generation_id) {
+      supabase.from('generations').select('input_data, output_data').eq('id', generation_id).single().then(({ data: genData }) => {
+        if (genData) {
+          if (!originalText) setOriginalText(genData.input_data);
+          if (!data.captions?.length) {
+            setData(genData.output_data);
+          }
+        }
+      });
+    }
+  }, [generation_id, originalText, data]);
+
+  // Background auto-save whenever they stop on a caption
+  useEffect(() => {
+    if (finalMemeUri || !generation_id) return;
+    const timeout = setTimeout(async () => {
+      try {
+        if (viewShotRef.current?.capture) {
+          const uri = await viewShotRef.current.capture();
+          const localUri = `${CHATVIBE_MEMES_DIR}${generation_id}.jpeg`;
+          if (uri.startsWith('data:image')) {
+            const base64Data = uri.split(',')[1];
+            await FileSystem.writeAsStringAsync(localUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+          } else if (uri !== localUri && uri.startsWith('file:')) {
+            await FileSystem.copyAsync({ from: uri, to: localUri });
+          }
+        }
+      } catch (e) {
+        console.log('Background auto-save failed', e);
+      }
+    }, 800);
+    return () => clearTimeout(timeout);
+  }, [activeIndex, finalMemeUri, generation_id]);
 
   const handleScroll = (event: any) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
@@ -59,76 +100,180 @@ export default function MemeGeneratorResultScreen() {
     setActiveIndex(Math.round(index));
   };
 
+  const handleRegenerate = () => {
+    router.back();
+  };
+
+  const captureMeme = async () => {
+    if (viewShotRef.current?.capture) {
+      try {
+        const uri = await viewShotRef.current.capture();
+        return uri;
+      } catch (e) {
+        console.error('Failed to capture view', e);
+        showAlert('Oops!', 'We failed to generate the final meme image.', [], 'error');
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const handleSaveToGallery = async () => {
+    try {
+      let uri = finalMemeUri;
+      if (!uri) uri = await captureMeme();
+      if (!uri) return;
+
+      const localUri = `${CHATVIBE_MEMES_DIR}${generation_id || Date.now()}.jpeg`;
+      
+      if (uri.startsWith('data:image')) {
+        const base64Data = uri.split(',')[1];
+        await FileSystem.writeAsStringAsync(localUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+      } else if (uri !== localUri && uri.startsWith('file:')) {
+        await FileSystem.copyAsync({ from: uri, to: localUri });
+      }
+      
+      setFinalMemeUri(localUri);
+
+      const { status } = await MediaLibrary.requestPermissionsAsync(false, ['photo']);
+      if (status === 'granted') {
+        const asset = await MediaLibrary.createAssetAsync(localUri);
+        await MediaLibrary.createAlbumAsync('ChatVibe', asset, false);
+        showAlert('Saved!', 'Saved to Gallery ✨', [], 'success');
+      } else {
+        showAlert('Permission needed', 'Enable gallery access to save to photos.', [], 'error');
+      }
+    } catch (e: any) {
+      console.error(e);
+      showAlert('Oops!', 'We hit a snag saving this.', [], 'error');
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      let uri = finalMemeUri;
+      if (!uri) uri = await captureMeme();
+      if (!uri) return;
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        showAlert('Error sharing', 'Sharing is not available on this device.', [], 'error');
+        return;
+      }
+
+      let fileUri = uri;
+      if (uri.startsWith('data:image')) {
+        fileUri = FileSystem.cacheDirectory + 'chatvibe_share.jpeg';
+        const base64Data = uri.split(',')[1];
+        await FileSystem.writeAsStringAsync(fileUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+      }
+
+      await Sharing.shareAsync(fileUri, {
+        dialogTitle: 'Share your meme',
+        mimeType: 'image/jpeg',
+        UTI: 'public.jpeg',
+      });
+    } catch (error: any) {
+      showAlert('Error sharing', 'We couldn\'t open the share menu.', [], 'error');
+    }
+  };
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FCFBFF' }} edges={['top', 'left', 'right', 'bottom']}>
-      <View className="flex-row justify-between items-center px-6 pt-4 pb-4">
-        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white rounded-full items-center justify-center shadow-sm">
-          <Feather name="arrow-left" size={20} color="#111" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#cff5e1' }} edges={['left', 'right']}>
+      <View className="flex-row justify-between items-center px-6 pb-4" style={{ paddingTop: Math.max(insets.top + 16, 24) }}>
+        <TouchableOpacity onPress={handleRegenerate} className="w-12 h-12 bg-white rounded-xl items-center justify-center border-[3px] border-black" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+          <Feather name="arrow-left" size={24} color="black" />
         </TouchableOpacity>
-        <Text className="text-[18px] font-extrabold text-[#111] tracking-tight">Meme Generator</Text>
-        <View className="w-10 h-10" />
+        <Text className="text-[20px] font-extrabold text-black tracking-tight">Your Meme</Text>
+        <View className="w-12 h-12" />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        <View className="px-6 mb-4">
-          <View className="w-full h-[300px] bg-black rounded-[24px] overflow-hidden items-center justify-center">
-            {original_text && original_text.toString().startsWith('data:image') ? (
-              <Image source={{ uri: original_text as string }} className="w-full h-full" resizeMode="cover" />
-            ) : (
-              <Text className="text-white">Image Preview</Text>
-            )}
-          </View>
+      {!data.captions || data.captions.length === 0 ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Feather name="alert-triangle" size={32} color="black" />
+          <Text className="font-extrabold text-black text-[18px] mt-4 mb-2">Generation Failed</Text>
+          <Text className="text-black/80 text-[14px] text-center mb-6 font-bold">We couldn't generate meme captions. Please try a different image.</Text>
+          <TouchableOpacity onPress={handleRegenerate} className="bg-neo-purple px-6 py-3 rounded-2xl flex-row items-center border-[3px] border-black" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+            <Feather name="refresh-cw" size={16} color="black" />
+            <Text className="text-black font-extrabold ml-2">Try Again</Text>
+          </TouchableOpacity>
         </View>
-
-        <Text className="px-6 font-bold text-[#111] text-[16px] mb-2">Swipe for captions</Text>
-
-        <View>
-          <ScrollView 
-            horizontal 
-            pagingEnabled 
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={handleScroll}
-            className="w-full"
-          >
-            {data.captions?.map((caption: string, idx: number) => (
-              <View key={idx} style={{ width: width, paddingHorizontal: 24 }}>
-                <View className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 min-h-[120px] justify-center">
-                  <Text className="text-[20px] text-[#111] font-bold text-center leading-8">{caption}</Text>
-                </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 80, 80) }}>
+          
+          {(finalMemeUri || originalText) && (
+            <View className="px-6 mb-8 mt-4">
+              <View className="w-full bg-black rounded-[32px] overflow-hidden items-center justify-center border-[4px] border-black" style={{ minHeight: 300, shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0 }}>
+                {finalMemeUri ? (
+                  <Image source={{ uri: finalMemeUri }} style={{ width: width - 48, height: width - 48, resizeMode: 'contain' }} />
+                ) : (
+                  originalText && (originalText.toString().startsWith('data:image') || originalText.toString().startsWith('file:')) ? (
+                    <MemeCanvas
+                      ref={viewShotRef}
+                      imageUri={originalText as string}
+                      caption={data.captions?.[activeIndex] || ''}
+                      width={width - 48}
+                    />
+                  ) : (
+                    <View className="items-center justify-center p-6 z-20">
+                      <Feather name="image" size={40} color="white" style={{ marginBottom: 12, opacity: 0.8 }} />
+                      <Text className="text-white font-extrabold text-center">Original image not found.</Text>
+                    </View>
+                  )
+                )}
               </View>
-            ))}
-          </ScrollView>
+            </View>
+          )}
 
-          <View className="flex-row justify-center mt-4">
-            {data.captions?.map((_: any, idx: number) => (
-              <View key={idx} className={`w-2 h-2 rounded-full mx-1 ${idx === activeIndex ? 'bg-[#FF8C00]' : 'bg-gray-200'}`} />
-            ))}
+          {!finalMemeUri && data.captions && data.captions.length > 0 && (
+            <View>
+              <Text className="px-6 font-extrabold text-black text-[16px] mb-4 text-center uppercase tracking-wider">Swipe to choose caption</Text>
+
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={handleScroll}
+                className="w-full mb-6"
+              >
+                {data.captions.map((caption: string, idx: number) => (
+                  <View key={idx} style={{ width: width, paddingHorizontal: 24, paddingTop: 16 }}>
+                    <TouchableOpacity
+                      activeOpacity={1}
+                      className="bg-white rounded-[32px] p-6 border-[4px] border-black min-h-[120px] justify-center items-center relative"
+                      style={{ shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 }}
+                    >
+                      <View className="absolute -top-4 bg-neo-orange border-[3px] border-black px-4 py-1 rounded-xl" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+                        <Text className="text-black font-extrabold text-[12px]">Option {idx + 1}</Text>
+                      </View>
+                      <Text className="text-[20px] text-black font-extrabold text-center leading-8">{caption}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <View className="flex-row justify-center mb-10">
+                {data.captions.map((_: any, idx: number) => (
+                  <View key={idx} className={`w-3 h-3 rounded-full mx-1 border-2 border-black ${idx === activeIndex ? 'bg-black w-8' : 'bg-white'}`} />
+                ))}
+              </View>
+            </View>
+          )}
+
+          <View className="px-6 flex-row flex-wrap justify-between">
+            <TouchableOpacity onPress={handleShare} className="w-[48%] bg-white rounded-2xl p-4 mb-4 items-center justify-center flex-row border-[3px] border-black" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+              <Feather name="share" size={20} color="black" />
+              <Text className="font-extrabold text-black ml-2 text-[14px]">Share</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleSaveToGallery} className="w-[48%] bg-neo-yellow rounded-2xl p-4 mb-4 items-center justify-center flex-row border-[3px] border-black" style={{ shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+              <Feather name="save" size={20} color="black" />
+              <Text className="font-extrabold text-black ml-2 text-[14px]">Save</Text>
+            </TouchableOpacity>
           </View>
-        </View>
 
-        <Text className="text-center text-[#8E8E93] text-[12px] my-6 px-4">
-          For entertainment purposes only. AI can make mistakes.
-        </Text>
-
-        <View className="flex-row flex-wrap justify-between mb-12 px-6">
-          <TouchableOpacity onPress={handleCopy} className="w-[48%] bg-white rounded-[20px] p-4 mb-4 shadow-sm items-center justify-center flex-row">
-            <Feather name="copy" size={20} color="#111" />
-            <Text className="font-bold text-[#111] ml-2">Copy</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleShare} className="w-[48%] bg-white rounded-[20px] p-4 mb-4 shadow-sm items-center justify-center flex-row">
-            <Feather name="share" size={20} color="#111" />
-            <Text className="font-bold text-[#111] ml-2">Share</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleFavorite} disabled={isSaving || isFavorited} className={`w-[48%] bg-white rounded-[20px] p-4 shadow-sm items-center justify-center flex-row ${(isSaving || isFavorited) ? 'opacity-50' : ''}`}>
-            <FontAwesome5 name="star" size={18} color={isFavorited ? "#FFC107" : "#111"} solid={isFavorited} />
-            <Text className="font-bold text-[#111] ml-2">{isFavorited ? 'Saved' : 'Favorite'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.back()} className="w-[48%] bg-[#FF8C00] rounded-[20px] p-4 shadow-sm items-center justify-center flex-row">
-            <Feather name="refresh-cw" size={20} color="white" />
-            <Text className="font-bold text-white ml-2">Remix</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

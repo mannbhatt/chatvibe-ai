@@ -7,21 +7,20 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FCFBFF"
-    },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chatvibeai.app",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryAddUsageDescription": "ChatVibe AI needs access to save your memes and creations to your photo library."
+      }
     },
     "android": {
       "package": "com.chatvibeai.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#635BFF",
+        "backgroundColor": "#cff5e1",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -37,7 +36,15 @@
       "expo-router",
       "expo-status-bar",
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "ChatVibe AI needs access to save your memes and creations to your photo library.",
+          "savePhotosPermission": "ChatVibe AI needs access to save your memes and creations to your photo library."
+        }
+      ]
     ],
     "extra": {
       "router": {},

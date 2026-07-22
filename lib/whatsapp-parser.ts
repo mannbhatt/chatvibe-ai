@@ -89,17 +89,14 @@ export const parseWhatsAppText = (rawText: string): ParseResult => {
     messages.push(currentMessage);
   }
 
-  // Slice to last 150 messages to save tokens and prevent huge payloads
-  const recentMessages = messages.slice(-150);
-
   return {
-    messages: recentMessages,
+    messages: messages,
     participants: Array.from(participantsSet),
   };
 };
 
 export const extractZipAndParse = async (fileUri: string): Promise<ParseResult> => {
-  const fileInfo = await FileSystem.getInfoAsync(fileUri, { size: true });
+  const fileInfo = await FileSystem.getInfoAsync(fileUri);
   if (fileInfo.exists && fileInfo.size && fileInfo.size > 10 * 1024 * 1024) {
     throw new Error('File exceeds 10MB limit.');
   }
