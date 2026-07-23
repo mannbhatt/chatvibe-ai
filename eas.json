@@ -4,6 +4,7 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "node": "24.14.1",
     "development": {
       "developmentClient": true,
       "distribution": "internal"
