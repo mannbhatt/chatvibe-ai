@@ -118,6 +118,7 @@ export default function LoginScreen() {
             <Text className="ml-3 font-extrabold text-black text-[16px]">{loading ? 'Connecting...' : 'Continue with Google'}</Text>
           </TouchableOpacity>
 
+          {/* 
           <TouchableOpacity
             onPress={signInWithApple}
             disabled={loading}
@@ -127,6 +128,7 @@ export default function LoginScreen() {
             <FontAwesome5 name="apple" size={22} color="white" />
             <Text className="ml-3 font-extrabold text-white text-[16px]">Continue with Apple</Text>
           </TouchableOpacity>
+          */}
 
           <Text className="text-center text-black/70 font-bold text-[13px] leading-5 px-2">
             By continuing, you agree to our <Text className="text-black font-extrabold">Terms of Service</Text> and <Text className="text-black font-extrabold">Privacy Policy</Text>.
