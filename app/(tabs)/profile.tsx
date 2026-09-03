@@ -69,6 +69,45 @@ export default function ProfileScreen() {
     ], 'info');
   };
 
+  const handleDeleteAccount = () => {
+    showAlert("Delete Account?", "Deleting your account will permanently remove your ChatVibe AI account and associated data. This action cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete Account", style: "destructive", onPress: async () => {
+          setLoading(true);
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) {
+              throw new Error("No active session found.");
+            }
+
+            const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || '';
+            const response = await fetch(`${apiUrl}/api/account/delete`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+              }
+            });
+
+            if (!response.ok) {
+              const data = await response.json().catch(() => ({}));
+              throw new Error(data.error || "Failed to delete account. Please try again.");
+            }
+
+            // Successfully deleted
+            await supabase.auth.signOut();
+            router.replace('/(auth)/login');
+          } catch (error: any) {
+            console.error('Delete account error:', error);
+            showAlert("Error", error.message || "Failed to delete account.", [{ text: "OK" }], 'error');
+          } finally {
+            setLoading(false);
+          }
+        }
+      }
+    ], 'error');
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#cff5e1' }} edges={['top', 'left', 'right']}>
 
@@ -153,12 +192,20 @@ export default function ProfileScreen() {
               <Feather name="chevron-right" size={24} color="black" />
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleLogout} className="p-4 flex-row items-center">
+            <TouchableOpacity onPress={handleLogout} className="p-4 flex-row items-center border-b-[3px] border-black">
               <View className="bg-neo-orange w-10 h-10 rounded-xl items-center justify-center mr-4 border-2 border-black">
                 <Feather name="log-out" size={18} color="black" />
               </View>
               <Text className="flex-1 font-extrabold text-black text-[16px]">Log Out</Text>
               <Feather name="chevron-right" size={24} color="black" />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleDeleteAccount} className="p-4 flex-row items-center bg-[#FFF0F3]">
+              <View className="bg-[#FF4B72] w-10 h-10 rounded-xl items-center justify-center mr-4 border-2 border-black">
+                <Feather name="trash-2" size={18} color="white" />
+              </View>
+              <Text className="flex-1 font-extrabold text-[#FF4B72] text-[16px]">Delete Account</Text>
+              <Feather name="chevron-right" size={24} color="#FF4B72" />
             </TouchableOpacity>
           </View>
         </View>
