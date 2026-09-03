@@ -22,14 +22,12 @@ export default function TabLayout() {
         tabBarButton: (props) => <Pressable {...props as any} android_ripple={{ color: 'transparent' }} style={props.style} />,
         tabBarStyle: {
           backgroundColor: '#FFFFFF', // neo-green 00C49A
-
           borderWidth: 0,
           borderColor: '#000000',
           borderTopWidth: 2,
-          height: 56,
-          marginBottom: Math.max(24, insets.bottom),
-          paddingBottom: 0,
-          paddingTop: 0,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom,
+          paddingTop: 8,
         },
 
         headerShown: false,
